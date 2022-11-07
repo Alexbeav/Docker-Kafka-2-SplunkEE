@@ -8,7 +8,12 @@ Prerequisites:
       
       - Docker Desktop (Windows) or Docker Engine (Linux) 
       - Docker Compose (if not already packaged with Docker)
+      - OpenSSH-server (optional)
 
 How to Use:
 
-      - TBD
+      - Clone the repository, and CD to the /docker directory.
+      - Use "sudo ./run.sh" to download the necessary containers and set up the lab.
+      - Connect to localhost:8000, and log in to Splunk using "admin/ch@ngeM3".
+      - On the left side (installed apps), select "Kafka Smart Monitoring"
+      - You should be seeing "REALTIME AVG TRAFFIC IN (Kbps in)" and "REALTIME AVG MESSAGES/IN SEC" being received from kafka-1
