@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+
+  splunk:
+    image: splunk/splunk:latest
+    restart: "no"
+    hostname: splunk
+    ports:
+      - "8000:8000"
+      - "8089:8089"
+      - "9997:9997"
+      - "8080:8080"
+      - "8088:8088"
+    environment:
+      SPLUNK_START_ARGS: "--accept-license"
+      SPLUNK_PASSWORD: "ch@ngeM3"
+      SPLUNK_APPS_URL: "/tmp/kafka-sdm.tgz"
+    volumes:
+      - ../kafka-smart-monitoring/telegraf-kafka_1141.tgz:/tmp/kafka-sdm.tgz
+      - ../splunk/TA-telegraf-kafka:/opt/splunk/etc/apps/TA-telegraf-kafka
+      - ../splunk/TA-docker-kafka:/opt/splunk/etc/apps/TA-docker-kafka
+      - ../splunk/TA-kafka-demo:/opt/splunk/etc/apps/TA-kafka-demo      
+      - ../splunk/TA-confluent-interceptors:/opt/splunk/etc/apps/TA-confluent-interceptors
+      - ../splunk/container_share:/opt/splunk/container_share
+
+  zookeeper-1:
+    image: confluentinc/cp-zookeeper:latest
+    restart: "no"
+    hostname: zookeeper-1
+    logging:
+      driver: splunk
+      options:
+        splunk-token: "11113ee7-919e-4dc3-bde6-da10a2ac6709"
+        splunk-url: "https://localhost:8088"
+        splunk-insecureskipverify: "true"
+        splunk-verify-connection: "false"
+        splunk-sourcetype: "docker:kafka:zookeeper"
+        tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+        env: "env,label,host"
+    ports:
+      - "12181:12181"
+    mem_limit: 600m
+    volumes:
+      - ../jolokia:/opt/jolokia
+    depends_on:
+      - splunk
+    environment:
+      env: "docker_env"
+      label: "testing"
+      host: "zookeeper-1"
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 12181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: zookeeper-1:22888:23888
+      KAFKA_OPTS: "-javaagent:/opt/jolokia/jolokia-jvm-1.7.1.jar=port=8778,host=0.0.0.0"
+
+  kafka-1:
+    image: confluentinc/cp-kafka:latest
+    restart: "no"
+    hostname: kafka-1
+    logging:
+      driver: splunk
+      options:
+        splunk-token: "11113ee7-919e-4dc3-bde6-da10a2ac6709"
+        splunk-url: "https://localhost:8088"
+        splunk-insecureskipverify: "true"
+        splunk-verify-connection: "false"
+        splunk-sourcetype: "docker:kafka:broker"
+        tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+        env: "env,label,host"
+    ports:
+      - "19092:19092"
+    mem_limit: 1500m
+    depends_on:
+      - zookeeper-1
+    volumes:
+      - ../jolokia:/opt/jolokia
+    environment:
+      env: "docker_env"
+      label: "testing"
+      host: "kafka-1"
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:12181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:19092
+      KAFKA_OPTS: "-javaagent:/opt/jolokia/jolokia-jvm-1.7.1.jar=port=8778,host=0.0.0.0"
+      JMX_PORT: "9999"
+
+  kafka-connect-1:
+    image: confluentinc/cp-kafka-connect:latest
+    restart: "no"
+    hostname: kafka-connect-1
+    logging:
+      driver: splunk
+      options:
+        splunk-token: "11113ee7-919e-4dc3-bde6-da10a2ac6709"
+        splunk-url: "https://localhost:8088"
+        splunk-insecureskipverify: "true"
+        splunk-verify-connection: "false"
+        splunk-sourcetype: "docker:kafka:connect"
+        tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+        env: "env,label,host"
+    ports:
+      - "18082:8083"
+    mem_limit: 1500m
+    depends_on:
+      - zookeeper-1
+      - kafka-1
+    volumes:
+      - ../jolokia:/opt/jolokia
+      - ../splunk-kafka-connect:/etc/kafka-connect/jars/splunk-kafka-connect
+      - ../kafka-connect-datagen/confluentinc-kafka-connect-datagen:/etc/kafka-connect/jars/confluentinc-kafka-connect-datagen
+      - ../kafka-connect-syslog/confluentinc-kafka-connect-syslog:/etc/kafka-connect/jars/confluentinc-kafka-connect-syslog
+      - ../kafka-connect:/etc/kafka-connect/config
+    environment:
+      env: "docker_env"
+      label: "testing"
+      host: "kafka-connect-1"
+      KAFKA_OPTS: "-javaagent:/opt/jolokia/jolokia-jvm-1.7.1.jar=port=8778,host=0.0.0.0"
+    command: "/usr/bin/connect-distributed /etc/kafka-connect/config/connect-distributed.properties-kafka-connect-1"
+
+  telegraf:
+    image: telegraf:latest
+    restart: "no"
+    environment:
+      env: "docker_env"
+      label: "testing"
+      host: "telegraf"
+      HOST_PROC: /rootfs/proc
+      HOST_SYS: /rootfs/sys
+      HOST_ETC: /rootfs/etc
+      SPLUNK_HEC_URL: "https://splunk:8088"
+      SPLUNK_HEC_TOKEN: "205d43f1-2a31-4e60-a8b3-327eda49944a"
+    hostname: telegraf
+    logging:
+      driver: splunk
+      options:
+        splunk-token: "11113ee7-919e-4dc3-bde6-da10a2ac6709"
+        splunk-url: "https://localhost:8088"
+        splunk-insecureskipverify: "true"
+        splunk-verify-connection: "false"
+        splunk-sourcetype: "docker:telegraf"
+        tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+        env: "env,label,host"
+    mem_limit: 300m
+    depends_on:
+      - zookeeper-1
+      - kafka-1
+    volumes:
+      - ../telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/rootfs/sys:ro
+      - /proc:/rootfs/proc:ro
+      - /etc:/rootfs/etc:ro
+
+  kafka-monitor:
+    image: guilhemmarchand/kafka-monitor:latest
+    restart: "no"
+    hostname: kafka-monitor
+    logging:
+      driver: splunk
+      options:
+        splunk-token: "11113ee7-919e-4dc3-bde6-da10a2ac6709"
+        splunk-url: "https://localhost:8088"
+        splunk-insecureskipverify: "true"
+        splunk-verify-connection: "false"
+        splunk-sourcetype: "docker:kafka-monitor"
+        tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+        env: "env,label,host"
+    mem_limit: 300m
+    depends_on:
+      - zookeeper-1
+      - kafka-1
+    volumes:
+      - ../kafka-monitor:/usr/local/share/kafka-monitor
+    command: "/opt/kafka-monitor/bin/kafka-monitor-start.sh /usr/local/share/kafka-monitor/kafka-monitor.properties"
+    environment:
+      env: "docker_env"
+      label: "testing"
+      host: "kafka-monitor"
+
+  kafka-data-gen:
+    image: guilhemmarchand/kafka-data-gen:latest
+    restart: "no"
+    hostname: kafka-data-gen
+    depends_on:
+      - zookeeper-1
+      - kafka-1
+    command: "tail -f /dev/null"
